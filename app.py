@@ -1,78 +1,57 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request
+from flask_restful import Resource, Api
+from flask_jwt import JWT, jwt_required
+from security import authenticate, identify
 
 
 app = Flask(__name__)
-app.secret_key = 'muthomi'
+api = Api(app)
+jwt = JWT(app, authenticate, identify)
 
-stores = [
-    {
-        'name':'Bookstore',
-        'items':[
-            {
-                'name':'Bible',
-                'price':45.99
+items = []
+
+
+
+class Item(Resource):
+    def get(self, name):
+        item = next(filter(lambda x :x['name'] == name, items), None)
+        return {'item': item}, 200 if item else 404
+
+    def post(self, name):
+        if next(filter(lambda x :x['name'] == name, items), None):
+            return {'message' : f'an item with the name {name} already exists'}, 400
+        data = request.get_json()
+        new_item = {
+            'name':name, 'price' : data['price']
+        }
+        items.append(new_item)
+
+        return new_item, 201
+
+    def delete(self, name):
+        global items
+        items = list(filter(lambda x: x['name'] != name, items))
+        return {'message': 'item deleted successfully'}
+
+    def put(self, name):
+        data = request.get_json()
+        item = next(filter(lambda x :x['name'] == name, items), None)
+        if item:
+            item.update(data)
+        else:
+            item = {
+                'name' : name, 'price' : data['price']
             }
-        ]
-    }
-]
-
-
-@app.route('/', methods=['GET'])
-def index():
-    return jsonify({'message':'welcome to the store management system homepage'})
-
-
-# create a store
-@app.route('/store', methods=['POST'])
-def create_store():
-    requested_data = request.get_json()
-    new_store = {
-        'name':requested_data['name'],
-        'items':[]
-    }
-
-    stores.append(new_store)
-
-    return jsonify({'stores':stores})
-
-
-@app.route('/store/<string:name>', methods=['GET']) #get store from db
-def get_store(name):
-    for store in stores:
-        if store['name'] == name:
-            return jsonify({'store':store})
-    return jsonify(message='The store you are looking for is not available')
-
-
-@app.route('/store', methods=['GET']) #retireve a list od stores
-def get_stores():
-    return jsonify({'stores':stores})
-
-
-
-@app.route('/store/<string:name>/item', methods=['POST']) #create item
-def create_item_in_store(name):
-    for store in stores:
-        request_data = request.get_json()
-        if store['name'] == name:
-            new_item = {
-                'name':request_data['name'],
-                'price':request_data['price']
-            }
-            store['items'].append(new_item)
+            items.append(item)
+            return {'item' : item}
             
-            return jsonify({'item':new_item})
+class ItemList(Resource):
+    def get(self):
+        pass
 
-    return jsonify('Store unavailable')
-
-
-@app.route('/store/<string:name>/item', methods=['GET']) 
-def get_item_in_store(name):
-    for store in stores:
-        if store['name'] == name:
-            return jsonify({'items':store['items']})
-    return jsonify('Store not found')
+api.add_resource(Item, '/item/<string:name>')
+api.add_resource(ItemList, '/items')
 
 
 
-app.run(port=5000)
+app.run(debug=True)
